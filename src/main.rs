@@ -8,10 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 
-fn get_offset(bank: u32, port: char, pin: u32) -> u32 {
-    let port_val = port as u32 - 'a' as u32;
-    bank * 32 + port_val * 8 + pin
-}
+use std::collections::HashMap;
+
+mod gpio;
 
 #[derive(Clone, Copy, Debug)]
 enum LedMode {
@@ -26,34 +25,9 @@ struct LedState {
 }
 
 fn led_worker(state: Arc<Mutex<LedState>>) {
-    let chip_path = "/dev/gpiochip1";
+    let mut gpio_storage = gpio::GpioStorage::new();
 
-    let mut chip = gpio_cdev::Chip::new(chip_path)
-        .context(format!("failed to create the chip {chip_path}"))
-        .unwrap();
-
-    let line_offset = get_offset(1, 'c', 0);
-    println!("line offset: {line_offset}");
-    let line_offset = line_offset - 32;
-
-    let outputs = chip
-        .get_all_lines()
-        .context("failed to get all lines")
-        .unwrap();
-
-    let total_lines = outputs.len();
-    println!("total lines: {total_lines}");
-
-    let output = chip
-        .get_line(line_offset)
-        .context(format!("failed to create the output {line_offset}"))
-        .unwrap();
-
-    let output_handle = output
-        .request(LineRequestFlags::OUTPUT, 0, "act_led_blink")
-        .context("failed to create the output handler: {error}")
-        .unwrap();
-
+    let output_handle = gpio_storage.get_or_create("GPIO1_C0").unwrap();
     let value_on = 1;
     let value_off = 0;
 

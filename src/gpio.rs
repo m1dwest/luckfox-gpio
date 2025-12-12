@@ -69,11 +69,12 @@ impl GpioStorage {
         let chip = chips.get_mut(gpio_id.chip_n as usize).ok_or_else(|| {
             let string_id = &gpio_id.string_id;
             let chip_n = gpio_id.chip_n;
+            let last_chip_n = GPIO_CHIPS_N - 1;
 
             anyhow::anyhow!(
                 "Id {string_id} is not supported for the current board. \
                 {string_id} should be located on {GPIO_CHIP_BASE_PATH}{chip_n} \
-                but the last gpiochip is {GPIO_CHIP_BASE_PATH}{GPIO_CHIPS_N}"
+                but the last gpiochip is {GPIO_CHIP_BASE_PATH}{last_chip_n}"
             )
         })?;
 
@@ -97,7 +98,6 @@ impl GpioStorage {
             Entry::Occupied(e) => e.into_mut(),
             Entry::Vacant(e) => {
                 let output_handle = get_output_handle(chip, gpio_id.line_offset)?;
-
                 e.insert(output_handle)
             }
         };

@@ -1,14 +1,8 @@
-// use std::{thread, time::Duration}
-
-use gpio_cdev::LineRequestFlags;
-
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-
-use std::collections::HashMap;
 
 mod gpio;
 
@@ -80,7 +74,7 @@ fn handle_client(stream: TcpStream, state: Arc<Mutex<LedState>>) {
             "OFF" => {
                 let mut s = state.lock().unwrap();
                 s.mode = LedMode::Off;
-                response = "OK: LED BLINK\n".into();
+                response = "OK: LED OFF\n".into();
             }
             "BLINK" => {
                 if let Some(ms_str) = parts.next() {

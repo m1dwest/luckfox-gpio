@@ -81,19 +81,20 @@ fn handle_client(stream: TcpStream, state: Arc<Mutex<LedState>>) {
                     if let Ok(ms) = ms_str.parse::<i32>() {
                         let mut s = state.lock().unwrap();
                         s.mode = LedMode::Blink { ms };
-                        response = "OK: LED BLINK\n".into();
+                        response = "OK: LED BLINK".into();
                     } else {
-                        response = "ERROR: LED BLINK\n".into();
+                        response = "ERROR: LED BLINK".into();
                     }
                 } else {
-                    response = "ERROR: LED BLINK\n".into();
+                    response = "ERROR: LED BLINK".into();
                 }
             }
             _ => {
-                response = "ERROR: unknown command\n".into();
+                response = "ERROR: unknown command".into();
             }
         }
 
+        println!("Client response: {response}");
         if writer.write_all(response.as_bytes()).is_err() {
             break;
         }

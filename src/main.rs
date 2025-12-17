@@ -1,138 +1,56 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+// use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use log::{debug, error, info, warn};
 
 mod gpio;
+mod handler;
 
-#[derive(Clone, Copy, Debug)]
-enum LedMode {
-    Off,
-    On,
-    Blink { ms: i32 },
-}
+const LISTEN_IP: &str = "0.0.0.0";
+const LISTEN_PORT: u32 = 5000;
 
-#[derive(Clone, Copy, Debug)]
-struct LedState {
-    mode: LedMode,
-}
+const RESPONSE_ACK: u8 = 0x06;
+const RESPONSE_NAK: u8 = 0x15;
 
-fn led_worker(state: Arc<Mutex<LedState>>) {
-    let mut gpio_storage = gpio::GpioStorage::new();
-
-    let output_handle = gpio_storage.get_or_create("GPIO1_C0").unwrap();
-    let value_on = 1;
-    let value_off = 0;
-
+fn handle_byte(mut stream: TcpStream) -> Result<()> {
+    let mut buf = [0u8; 1];
     loop {
-        let mode = { state.lock().unwrap().mode };
-
-        match mode {
-            LedMode::Off => {
-                output_handle.set_value(value_off).expect("value_off error");
-            }
-            LedMode::On => {
-                output_handle.set_value(value_on).expect("value_off error");
-            }
-            LedMode::Blink { ms } => {
-                output_handle.set_value(value_on).expect("value_on error");
-                std::thread::sleep(std::time::Duration::from_millis(ms as u64));
-                output_handle.set_value(value_off).expect("value_off error");
-                std::thread::sleep(std::time::Duration::from_millis(ms as u64));
-            }
-        }
-    }
-}
-
-fn handle_client(stream: TcpStream, state: Arc<Mutex<LedState>>) {
-    let peer = stream.peer_addr().ok();
-    let mut writer = stream;
-    let reader = writer.try_clone().unwrap();
-    let mut reader = BufReader::new(reader);
-
-    let _ = writer.write_all(b"Server is ready\n\n");
-
-    let mut line = String::new();
-    while let Ok(n) = reader.read_line(&mut line) {
-        if n == 0 {
-            break; // EOF
-        }
-
-        let cmd = line.trim();
-        let mut parts = cmd.split_whitespace();
-        let keyword = parts.next().unwrap_or("").to_uppercase();
-
-        let mut response = String::new();
-
-        match keyword.as_str() {
-            "ON" => {
-                let mut s = state.lock().unwrap();
-                s.mode = LedMode::On;
-                response = "OK: LED ON\n".into();
-            }
-            "OFF" => {
-                let mut s = state.lock().unwrap();
-                s.mode = LedMode::Off;
-                response = "OK: LED OFF\n".into();
-            }
-            "BLINK" => {
-                if let Some(ms_str) = parts.next() {
-                    if let Ok(ms) = ms_str.parse::<i32>() {
-                        let mut s = state.lock().unwrap();
-                        s.mode = LedMode::Blink { ms };
-                        response = "OK: LED BLINK".into();
-                    } else {
-                        response = "ERROR: LED BLINK".into();
-                    }
-                } else {
-                    response = "ERROR: LED BLINK".into();
-                }
-            }
-            _ => {
-                response = "ERROR: unknown command".into();
-            }
-        }
-
-        println!("Client response: {response}");
-        if writer.write_all(response.as_bytes()).is_err() {
+        if stream.read_exact(&mut buf).is_err() {
+            info!("Disconnected");
             break;
         }
 
-        line.clear();
+        let value = buf[0];
+        info!("Received: {value}");
+
+        stream.write_all(b"\x06")?;
     }
 
-    if let Some(p) = peer {
-        eprintln!("Client disconnected: {p}");
-    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
-    let state = Arc::new(Mutex::new(LedState {
-        mode: LedMode::Blink { ms: 100 },
-    }));
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .target(env_logger::Target::Stdout)
+        .init();
 
-    {
-        let state_clone = state.clone();
-        std::thread::spawn(move || led_worker(state_clone));
-    }
-
-    let address = "0.0.0.0:5000";
-    let listener = TcpListener::bind(address)
+    let address = format!("{LISTEN_IP}:{LISTEN_PORT}");
+    let listener = TcpListener::bind(address.clone())
         .context(format!("failed to bind listener to the address {address}"))?;
-    println!("Listening on {address}");
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let state_clone = state.clone();
-                std::thread::spawn(move || handle_client(stream, state_clone));
-                println!("Success");
-            }
-            Err(error) => {
-                eprintln!("Error accepting connection: {error}");
-            }
-        }
+    let mut gpio_storage = gpio::GpioStorage::new();
+    let led_handler = handler::Led::new(&mut gpio_storage, "GPIO1_C0");
+
+    loop {
+        info!("Listening on {address}");
+
+        let (stream, address) = listener.accept()?;
+        stream.set_nodelay(true).ok();
+
+        info!("Connected: {address}");
+        handle_byte(stream)?;
     }
 
     Ok(())

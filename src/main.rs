@@ -1,9 +1,10 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-// use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use log::{debug, error, info, warn};
+use log::{error, info};
+
+use crate::handler::Handler;
 
 mod gpio;
 mod handler;
@@ -11,13 +12,14 @@ mod handler;
 const LISTEN_IP: &str = "0.0.0.0";
 const LISTEN_PORT: u32 = 5000;
 
+const RESPONSE_EOT: u8 = 0x04;
 const RESPONSE_ACK: u8 = 0x06;
 const RESPONSE_NAK: u8 = 0x15;
 
-fn handle_byte(mut stream: TcpStream) -> Result<()> {
+fn handle_byte<T: handler::Handler>(mut stream: TcpStream, handler: &mut T) {
     let mut buf = [0u8; 1];
     loop {
-        if stream.read_exact(&mut buf).is_err() {
+        if stream.read_exact(&mut buf).is_err() || buf[0] == RESPONSE_EOT {
             info!("Disconnected");
             break;
         }
@@ -25,10 +27,16 @@ fn handle_byte(mut stream: TcpStream) -> Result<()> {
         let value = buf[0];
         info!("Received: {value}");
 
-        stream.write_all(b"\x06")?;
+        match handler.handle(value) {
+            Ok(()) => {
+                stream.write_all(&[RESPONSE_ACK]).unwrap();
+            }
+            Err(e) => {
+                error!("{e}");
+                stream.write_all(&[RESPONSE_NAK]).unwrap();
+            }
+        }
     }
-
-    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -38,10 +46,13 @@ fn main() -> Result<()> {
 
     let address = format!("{LISTEN_IP}:{LISTEN_PORT}");
     let listener = TcpListener::bind(address.clone())
-        .context(format!("failed to bind listener to the address {address}"))?;
+        .context(format!("Failed to bind listener to the address {address}"))?;
 
     let mut gpio_storage = gpio::GpioStorage::new();
-    let led_handler = handler::Led::new(&mut gpio_storage, "GPIO1_C0");
+    let mut led_handler = handler::Led::new(&mut gpio_storage, "GPIO1_C0")?;
+    led_handler
+        .init_default()
+        .context("Failed to init default state for handler")?;
 
     loop {
         info!("Listening on {address}");
@@ -50,8 +61,6 @@ fn main() -> Result<()> {
         stream.set_nodelay(true).ok();
 
         info!("Connected: {address}");
-        handle_byte(stream)?;
+        handle_byte(stream, &mut led_handler);
     }
-
-    Ok(())
 }

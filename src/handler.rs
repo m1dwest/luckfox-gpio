@@ -4,6 +4,7 @@ use crate::gpio;
 
 const LED_OFF: u8 = 0x30;
 const LED_ON: u8 = 0x31;
+const HANDSHAKE: u8 = 0x05;
 
 pub trait Handler {
     fn init_default(&mut self) -> Result<()>;
@@ -65,6 +66,7 @@ impl<'a> Handler for Led<'a> {
         match byte {
             LED_ON => self.set_gpio_state(LedState::On),
             LED_OFF => self.set_gpio_state(LedState::Off),
+            HANDSHAKE => Ok(()),
             _ => {
                 anyhow::bail!("Unable to parse the value: {byte}")
             }

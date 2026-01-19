@@ -1,15 +1,11 @@
 use anyhow::{Context, Result};
 
+use super::Handler;
 use crate::gpio;
 
 const LED_OFF: u8 = 0x30;
 const LED_ON: u8 = 0x31;
 const HANDSHAKE: u8 = 0x05;
-
-pub trait Handler {
-    fn init_default(&mut self) -> Result<()>;
-    fn handle(&mut self, byte: u8) -> Result<()>;
-}
 
 #[derive(Debug)]
 pub enum LedState {

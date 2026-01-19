@@ -4,10 +4,10 @@ use std::net::{TcpListener, TcpStream};
 use anyhow::{Context, Result};
 use log::{error, info};
 
-use crate::handler::Handler;
+use crate::handlers::Handler;
 
 mod gpio;
-mod handler;
+mod handlers;
 
 const LISTEN_IP: &str = "0.0.0.0";
 const LISTEN_PORT: u32 = 5000;
@@ -16,7 +16,7 @@ const RESPONSE_EOT: u8 = 0x04;
 const RESPONSE_ACK: u8 = 0x06;
 const RESPONSE_NAK: u8 = 0x15;
 
-fn handle_byte<T: handler::Handler>(mut stream: TcpStream, handler: &mut T) {
+fn handle_byte<T: handlers::Handler>(mut stream: TcpStream, handler: &mut T) {
     let mut buf = [0u8; 1];
     loop {
         if stream.read_exact(&mut buf).is_err() || buf[0] == RESPONSE_EOT {
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         .context(format!("Failed to bind listener to the address {address}"))?;
 
     let mut gpio_storage = gpio::GpioStorage::new();
-    let mut led_handler = handler::Led::new(&mut gpio_storage, "GPIO1_C0")?;
+    let mut led_handler = handlers::Led::new(&mut gpio_storage, "GPIO1_C0")?;
     led_handler
         .init_default()
         .context("Failed to init default state for handler")?;

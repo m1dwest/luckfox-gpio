@@ -14,9 +14,10 @@ const RESPONSE_EOT: u8 = 0x04;
 const RESPONSE_ACK: u8 = 0x06;
 const RESPONSE_NAK: u8 = 0x15;
 
-const LED_OFF: u8 = 0x30;
-const LED_ON: u8 = 0x31;
-const HANDSHAKE: u8 = 0x05;
+const STOP: u8 = 0x30;
+const START: u8 = 0x31;
+const REV: u8 = 0x32;
+const PING: u8 = 0x05;
 
 fn handle_byte(mut stream: TcpStream, handler: &mut handler::Handler) {
     let mut buf = [0u8; 1];
@@ -52,9 +53,10 @@ fn main() -> Result<()> {
 
     let mut gpio_storage = gpio::GpioStorage::new();
     let mut handler = handler::Handler::new(&mut gpio_storage);
-    handler.enable_gpio("GPIO1_C0", LED_ON, true);
-    handler.enable_gpio("GPIO1_C0", LED_OFF, false);
-    handler.enable_gpio("GPIO1_C0", HANDSHAKE, false);
+    handler.add_gpio_handler(START, "GPIO1_C0", handler::Action::On)?;
+    handler.add_gpio_handler(STOP, "GPIO1_C0", handler::Action::Off)?;
+    handler.add_gpio_handler(PING, "GPIO1_C0", handler::Action::Null)?;
+    // handler.add_gpio_handler("GPIO1_C1", REV, true)?;
 
     loop {
         info!("Listening on {address}");

@@ -3,9 +3,28 @@ use anyhow::{Context, Result, anyhow};
 use crate::gpio;
 use std::collections::HashMap;
 
+#[derive(Copy, Clone)]
+pub enum Action {
+    On,
+    Off,
+    Toggle,
+    Null,
+}
+
+impl Action {
+    pub fn apply(&self, value: &mut u8) {
+        match self {
+            Action::On => *value = 1,
+            Action::Off => *value = 0,
+            Action::Toggle => *value = if *value == 1 { 0 } else { 1 },
+            Action::Null => {}
+        }
+    }
+}
+
 struct Signal {
     id: String,
-    state: bool,
+    action: Action,
 }
 
 pub struct Handler<'a> {
@@ -21,29 +40,29 @@ impl<'a> Handler<'a> {
         }
     }
 
-    pub fn enable_gpio(&mut self, id: &str, signal: u8, state: bool) -> Result<()> {
+    pub fn add_gpio_handler(&mut self, signal: u8, id: &str, action: Action) -> Result<()> {
         self.storage.get_or_create(id)?;
-        self.set_value(id, state)?;
+        self.apply_action(id, &action)?;
         self.signals.insert(
             signal,
             Signal {
                 id: id.to_owned(),
-                state,
+                action,
             },
         );
         Ok(())
     }
 
     pub fn send(&mut self, signal: u8) -> Result<()> {
-        let (id, state) = self
+        let (id, action) = self
             .signals
             .get(&signal)
-            .map(|s| (s.id.clone(), s.state))
+            .map(|s| (s.id.clone(), s.action))
             .ok_or_else(|| anyhow!("No GPIO for the signal {signal} exist"))?;
-        self.set_value(id.as_str(), state)
+        self.apply_action(id.as_str(), &action)
     }
 
-    pub fn status(&self, id: &str) -> Option<u8> {
+    pub fn _status(&self, id: &str) -> Option<u8> {
         self.storage.get_value(id)
     }
 
@@ -52,5 +71,14 @@ impl<'a> Handler<'a> {
         line_handler
             .set_value(state as u8)
             .with_context(|| format!("Unable to set {} state for GPIO {}", state, id))
+    }
+
+    fn apply_action(&mut self, id: &str, action: &Action) -> Result<()> {
+        let line_handler = self.storage.get_or_create(id)?;
+        let mut value = line_handler.get_value()?;
+        action.apply(&mut value);
+        line_handler
+            .set_value(value)
+            .with_context(|| format!("Unable to set {} value for GPIO {}", value, id))
     }
 }

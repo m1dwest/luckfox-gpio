@@ -17,6 +17,7 @@ const RESPONSE_NAK: u8 = 0x15;
 const STOP: u8 = 0x30;
 const START: u8 = 0x31;
 const REV: u8 = 0x32;
+const REV_STATUS: u8 = 0x33;
 const PING: u8 = 0x05;
 
 fn handle_byte(mut stream: TcpStream, handler: &mut handler::Handler) {
@@ -31,8 +32,8 @@ fn handle_byte(mut stream: TcpStream, handler: &mut handler::Handler) {
         info!("Received: {value}");
 
         match handler.send(value) {
-            Ok(()) => {
-                stream.write_all(&[RESPONSE_ACK]).unwrap();
+            Ok(reply) => {
+                stream.write_all(&[reply.unwrap_or(RESPONSE_ACK)]).unwrap();
             }
             Err(e) => {
                 error!("{e}");
@@ -56,7 +57,8 @@ fn main() -> Result<()> {
     handler.add_gpio_handler(START, "GPIO1_C0", handler::Action::On)?;
     handler.add_gpio_handler(STOP, "GPIO1_C0", handler::Action::Off)?;
     handler.add_gpio_handler(PING, "GPIO1_C0", handler::Action::Null)?;
-    // handler.add_gpio_handler("GPIO1_C1", REV, true)?;
+    handler.add_gpio_handler(REV, "GPIO1_C1", handler::Action::Toggle)?;
+    handler.add_gpio_handler(REV_STATUS, "GPIO1_C1", handler::Action::Status)?;
 
     loop {
         info!("Listening on {address}");

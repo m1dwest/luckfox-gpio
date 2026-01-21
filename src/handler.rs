@@ -8,16 +8,29 @@ pub enum Action {
     On,
     Off,
     Toggle,
+    Status,
     Null,
 }
 
+type Reply = Option<u8>;
+
 impl Action {
-    pub fn apply(&self, value: &mut u8) {
+    pub fn apply(&self, value: &mut u8) -> Reply {
         match self {
-            Action::On => *value = 1,
-            Action::Off => *value = 0,
-            Action::Toggle => *value = if *value == 1 { 0 } else { 1 },
-            Action::Null => {}
+            Action::On => {
+                *value = 1;
+                None
+            }
+            Action::Off => {
+                *value = 0;
+                None
+            }
+            Action::Toggle => {
+                *value = if *value == 1 { 0 } else { 1 };
+                None
+            }
+            Action::Status => Some(*value),
+            Action::Null => None,
         }
     }
 }
@@ -53,7 +66,7 @@ impl<'a> Handler<'a> {
         Ok(())
     }
 
-    pub fn send(&mut self, signal: u8) -> Result<()> {
+    pub fn send(&mut self, signal: u8) -> Result<Reply> {
         let (id, action) = self
             .signals
             .get(&signal)
@@ -73,12 +86,13 @@ impl<'a> Handler<'a> {
             .with_context(|| format!("Unable to set {} state for GPIO {}", state, id))
     }
 
-    fn apply_action(&mut self, id: &str, action: &Action) -> Result<()> {
+    fn apply_action(&mut self, id: &str, action: &Action) -> Result<Reply> {
         let line_handler = self.storage.get_or_create(id)?;
         let mut value = line_handler.get_value()?;
-        action.apply(&mut value);
+        let reply = action.apply(&mut value);
         line_handler
             .set_value(value)
-            .with_context(|| format!("Unable to set {} value for GPIO {}", value, id))
+            .with_context(|| format!("Unable to set {} value for GPIO {}", value, id))?;
+        Ok(reply)
     }
 }
